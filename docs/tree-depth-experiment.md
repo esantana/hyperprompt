@@ -1,6 +1,12 @@
 # Tree depth experiment: reading below the lossless floor
 
-**Date:** 2026-07-15 · **Code:** `-t` and `--fuse` flags of `hyperprompt.sh`
+**Date:** 2026-07-15, updated 2026-07-16 · **Code:** `-t` and `--fuse`
+flags of `hyperprompt.sh`
+
+> **Updated:** see the [follow-up below](#follow-up-grid-snapping-and-a-prior-free-reality-check-2026-07-16)
+> — grid snapping (same character = same decimated pattern on every line)
+> and a prior-free reality check showing that below-floor prose scores are
+> largely context reconstruction.
 
 ## Question
 
