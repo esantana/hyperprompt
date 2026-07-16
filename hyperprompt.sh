@@ -107,9 +107,25 @@ ascent, descent = font.getmetrics()
 line_h = ascent + descent
 margin = 2
 
+# ------------------------------------------------ sampling-grid snapping
+# Below the lossless floor the tile subsamples the render, so a glyph's
+# decimated pattern depends on its phase relative to the sampling grid:
+# with the natural metrics the same character can decimate differently on
+# different lines/columns. Snap every advance to the sampling period
+# (2^tree box blocks for --fuse, 2^(tree+1) jitter for the raw tile) so
+# each character lands at a constant phase and decimates identically.
+period = 1
+if tree > 0:
+    period = (2 ** tree) if fuse else (2 ** (tree + 1))
+    adv = math.ceil(adv / period) * period
+    line_h = math.ceil(line_h / period) * period
+    margin = period
+
 # -------------------------------------------------------- line wrapping
 paragraphs = text.rstrip("\n").split("\n")
 gap_h = max(2, line_h // 2)  # blank line becomes a half-height gap
+if period > 1:
+    gap_h = math.ceil(gap_h / period) * period
 
 def wrap(cols):
     """List of (text, height_px); a blank line takes half a line height."""
@@ -174,7 +190,13 @@ def render(items, side):
     y = margin
     for ln, h in items:
         if ln:
-            d.text((margin, y), ln, font=font, fill=0)
+            if period > 1:  # per-character draw at grid-aligned positions
+                x = margin
+                for ch in ln:
+                    d.text((x, y), ch, font=font, fill=0)
+                    x += adv
+            else:
+                d.text((margin, y), ln, font=font, fill=0)
         y += h
     return img
 

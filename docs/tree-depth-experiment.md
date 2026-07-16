@@ -74,6 +74,35 @@ trusting a transcription.
 - Do not use `-t` without `--fuse` for text, and do not use either in the
   automatic funnel.
 
+## Follow-up: grid snapping and a prior-free reality check (2026-07-16)
+
+**Mechanism (hypothesis by the author, confirmed).** Below the lossless
+floor a glyph's decimated pattern depends on its phase relative to the
+sampling grid, so line spacing changes how the same character is
+recognized. Menlo 7px has a 9px line height (odd): under `--fuse` (2px
+box blocks) consecutive lines alternate between two decimated patterns
+of the same character — measured directly: 2 distinct patterns across
+50 lines, collapsing to 1 when the line advance is snapped to 10. Menlo
+8px has a 5px advance (odd), so the phase alternates per column instead.
+This — not the non-integer effective size — is the real reason `-s 7`
+scored 0.39.
+
+**Fix (implemented).** When `-t` is active the renderer snaps margins,
+character advance and line advance up to the sampling period (`2^D` for
+`--fuse`, `2^(D+1)` for the raw tile) and draws glyph-by-glyph, so every
+occurrence of a character decimates identically. Unit test 7 asserts
+identical fused bands across lines. At 6px the natural metrics (4px
+advance, 8px line height) were already grid-perfect — one reason the
+lossless default reads at 100%.
+
+**Reality check.** On random dictionary words in numbered lines (no
+language prior to lean on), 4px-effective fused tiles read at 2–8% word
+accuracy (snapped 8%, unsnapped 2% — right direction, tiny n). The ~0.9
+similarities on man-page prose are therefore largely context-driven
+reconstruction, not glyph OCR. Practical rule: everything below the
+lossless floor is gist reading — never trust it with identifiers, URLs
+or numbers.
+
 ## Reproducing
 
 ```bash

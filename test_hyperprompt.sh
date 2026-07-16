@@ -123,6 +123,21 @@ box = r.reshape(256, 2, 256, 2).mean(axis=(1, 3))
 assert np.abs(f - box).max() <= 0.5, np.abs(f - box).max()
 PY
 
+# ---------------------------------------------------------------- test 7
+# grid snapping: below the lossless floor the same character must decimate
+# to the same pattern on every line (layout snapped to the sampling period)
+python3 -c "print('e' * 400)" > "$TMP/echars.txt"
+./hyperprompt.sh -s 7 -t 1 --fuse -o "$TMP/snap.png" < "$TMP/echars.txt" >/dev/null 2>&1
+check "snap: same char identical across lines" \
+  python3 - <<PY
+import numpy as np
+from PIL import Image
+t = np.asarray(Image.open("$TMP/snap.png"))
+b0, b1, b2 = t[1:6, :], t[6:11, :], t[11:16, :]
+assert (b0 < 200).any(), "no ink"
+assert np.array_equal(b0, b1) and np.array_equal(b1, b2), "line bands differ"
+PY
+
 echo "---"
 if [[ "$FAILS" -eq 0 ]]; then
   echo "all tests passed"

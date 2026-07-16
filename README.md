@@ -77,11 +77,29 @@ box filter of the render — antialiased downsampling instead of jittered
 point-sampling, at the same one-tile cost. On unseen text `-t 1 --fuse`
 scored 0.63 vs 0.35 for the raw tile: parity with a native small font.
 The invariant `fused siblings == box filter` is verified on every run.
-The fused sweet spot is `-s 8 -t 1 --fuse`: 0.90 similarity at ~8×
-savings, on par with `-s 4` native. Use even font sizes with `--fuse` —
-halving must land on integer pixels (`-s 7` gives a 3.5px effective
-glyph whose strokes smear across pixels; it scored 0.39). All of these
-stay below verbatim grade: the lossless floor remains the default.
+The fused sweet spot on prose is `-s 8 -t 1 --fuse`: 0.90 similarity at
+~8× savings, on par with `-s 4` native.
+
+**Layout snaps to the sampling grid below the floor.** A glyph's
+decimated pattern depends on its phase relative to the sampling grid:
+with natural font metrics the same character can decimate into
+different patterns on different lines or columns (Menlo 7px has a 9px
+line height, so lines alternate between two patterns; 8px has a 5px
+advance, so columns alternate). When `-t` is active the renderer snaps
+margins, the character advance and the line advance to the sampling
+period and draws glyph-by-glyph, so every occurrence of a character
+decimates identically — verified by a unit test. This supersedes the
+earlier "even font sizes only" rule.
+
+**Reality check on prior-free text.** On random dictionary words (no
+language prior to lean on), 4px-effective fused tiles read at only 2–8%
+word accuracy (snapped better than unsnapped, but both low). The ~0.9
+similarities above are therefore largely context-driven reconstruction,
+not glyph OCR. Treat everything below the lossless floor as gist
+reading — never trust it with identifiers, URLs or numbers. The 6px
+floor remains the only verbatim-grade configuration; notably, its
+natural Menlo metrics (4px advance, 8px line height) are already
+grid-perfect.
 
 ## Token economics
 

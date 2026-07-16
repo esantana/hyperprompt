@@ -45,8 +45,14 @@ glyphs (0.35 similarity at `-t 1`/6px vs 0.66 for a native 3px font at
 the same 88-token cost). `--fuse` fixes it: orienting the 4 Gray-code-
 reflected siblings (mirror x / mirror y / rot180) and averaging — exactly
 a 2x2 box filter, invariant checked per run — scored 0.63, parity with
-native small fonts. Fused sweet spot: `-s 8 -t 1 --fuse` scored 0.90 at
-~8x — on par with `-s 4` native (0.93 at ~7x). Use EVEN font sizes with
---fuse: halving must land on integer px (`-s 7` → 3.5px effective smears
-strokes, scored 0.39). Keep the 6px default when verbatim accuracy
-matters. Do not use `-t` in the funnel.
+native small fonts. Fused sweet spot on prose: `-s 8 -t 1 --fuse`, 0.90
+at ~8x. When `-t` is active the layout auto-snaps to the sampling grid
+(margins, char and line advance, glyph-by-glyph draw) so the same
+character decimates identically on every line/column — supersedes the
+old even-font-sizes rule (7px failed because its 9px line height
+alternated phase per line). Reality check: on random words (no language
+prior) 4px-effective tiles read at 2-8% word accuracy — the 0.9 was
+context reconstruction. Below-floor modes are gist-only; never feed
+them identifiers, URLs or numbers. Keep the 6px default (whose natural
+metrics are already grid-perfect) for verbatim. Do not use `-t` in the
+funnel.
