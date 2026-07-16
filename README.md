@@ -74,8 +74,11 @@ box filter of the render — antialiased downsampling instead of jittered
 point-sampling, at the same one-tile cost. On unseen text `-t 1 --fuse`
 scored 0.63 vs 0.35 for the raw tile: parity with a native small font.
 The invariant `fused siblings == box filter` is verified on every run.
-Both routes stay below verbatim grade — the lossless floor remains the
-default; for extra savings prefer `-s 4` or `-t 1 --fuse`.
+The fused sweet spot is `-s 8 -t 1 --fuse`: 0.90 similarity at ~8×
+savings, on par with `-s 4` native. Use even font sizes with `--fuse` —
+halving must land on integer pixels (`-s 7` gives a 3.5px effective
+glyph whose strokes smear across pixels; it scored 0.39). All of these
+stay below verbatim grade: the lossless floor remains the default.
 
 ## Token economics
 
