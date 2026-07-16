@@ -92,6 +92,19 @@ outb = np.empty_like(big); outb[Yb, Xb] = big
 assert np.array_equal(outb[:N, :N], small)
 PY
 
+# ---------------------------------------------------------------- test 5
+# tree depth: -t 1 sends a half-side tile (4x fewer tokens), lossy
+OUT5="$(./hyperprompt.sh -t 1 -o "$TMP/tree.png" < test_prompt.txt 2>&1)"
+RC5=$?
+check "tree: exit code 0"                    test "$RC5" -eq 0
+check "tree: 256x256 tile from 512 render"   grep -q "256x256px" <<<"$OUT5"
+check "tree: labeled lossy"                  grep -q "tree depth 1: lossy" <<<"$OUT5"
+check "tree: real dimensions 256x256" \
+  python3 -c "from PIL import Image; img = Image.open('$TMP/tree.png'); assert img.size == (256, 256), img.size"
+./hyperprompt.sh -o "$TMP/ident_default.png" < test_prompt.txt >/dev/null 2>&1
+./hyperprompt.sh -t 0 -o "$TMP/ident_t0.png" < test_prompt.txt >/dev/null 2>&1
+check "tree: -t 0 byte-identical to default"  cmp -s "$TMP/ident_default.png" "$TMP/ident_t0.png"
+
 echo "---"
 if [[ "$FAILS" -eq 0 ]]; then
   echo "all tests passed"

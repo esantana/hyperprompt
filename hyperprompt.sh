@@ -13,9 +13,11 @@
 #   -s N          font size in px (default: 6 = smallest size that reads
 #                 comfortably; 5 is the absolute floor, 8 is conservative)
 #   -f FONT       path to a .ttf/.ttc font (default: Menlo/Monaco)
-#   -m N          max side of the sent quadrant (default: 512 = best
+#   -m N          max side of the sent tile (default: 512 = best
 #                 chars-per-token density; never go above 1568 or the API
 #                 resizes the image and destroys the text)
+#   -t D          extra tree depth (default: 0 = lossless quadrant; each
+#                 level halves the sent tile = 4x fewer tokens, LOSSY)
 #   --no-aa       disable antialiasing (hard bitmap font)
 #   --debug DIR   save intermediate stages (1x render, 2x canvas,
 #                 transformed image with the 4 quadrants)
@@ -25,11 +27,12 @@ OUT="hyperprompt.png"
 FONTSIZE=6
 FONT=""
 MAXSIDE=512
+TREE=0
 AA=1
 DEBUG=""
 ARGS=()
 
-usage() { grep '^#' "$0" | sed 's/^# \{0,1\}//' | sed -n '2,21p'; exit "${1:-0}"; }
+usage() { grep '^#' "$0" | sed 's/^# \{0,1\}//' | sed -n '2,23p'; exit "${1:-0}"; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -37,6 +40,7 @@ while [[ $# -gt 0 ]]; do
     -s) FONTSIZE="$2"; shift 2 ;;
     -f) FONT="$2"; shift 2 ;;
     -m) MAXSIDE="$2"; shift 2 ;;
+    -t) TREE="$2"; shift 2 ;;
     --no-aa) AA=0; shift ;;
     --debug) DEBUG="$2"; shift 2 ;;
     -h|--help) usage 0 ;;
@@ -53,7 +57,8 @@ fi
 [[ -n "$TEXT" ]] || { echo "error: empty text" >&2; exit 1; }
 
 export HYPER_TEXT="$TEXT" HYPER_OUT="$OUT" HYPER_FONTSIZE="$FONTSIZE" \
-       HYPER_FONT="$FONT" HYPER_MAXSIDE="$MAXSIDE" HYPER_AA="$AA" HYPER_DEBUG="$DEBUG"
+       HYPER_FONT="$FONT" HYPER_MAXSIDE="$MAXSIDE" HYPER_AA="$AA" \
+       HYPER_DEBUG="$DEBUG" HYPER_TREE="$TREE"
 
 python3 <<'PY'
 import math
@@ -68,6 +73,7 @@ out_path  = os.environ["HYPER_OUT"]
 font_size = int(os.environ["HYPER_FONTSIZE"])
 font_path = os.environ["HYPER_FONT"]
 max_side  = int(os.environ["HYPER_MAXSIDE"])
+tree      = int(os.environ["HYPER_TREE"])
 aa        = os.environ["HYPER_AA"] == "1"
 debug_dir = os.environ["HYPER_DEBUG"]
 
@@ -130,9 +136,13 @@ def paginate(items, side):
         pages.append(page)
     return pages
 
-sides = [s for s in (64, 128, 256, 512, 1024, 2048) if s <= max_side]
+# the RENDER side may exceed max_side when tree > 0: only the tile
+# (render >> tree) is sent, and only the tile must respect the API cap
+sides = [s for s in (64, 128, 256, 512, 1024, 2048)
+         if 64 <= (s >> tree) <= max_side]
 if not sides:
-    sys.exit(f"error: -m {max_side} too small (minimum 64)")
+    sys.exit(f"error: no viable side for -m {max_side} -t {tree} "
+             f"(tile must be between 64 and {max_side})")
 
 pages, N = None, None
 for side in sides:
@@ -179,9 +189,11 @@ def gray_decode_int(n):
         n >>= 1
     return p
 
-def hypercube_transform(big):
-    """Applies leftRotate(vertex, k-1, k) to every pixel (a hypercube
-    automorphism). Output: 4 quadrants, each a 2x-decimated copy."""
+def hypercube_transform(big, r=1):
+    """Applies leftRotate(vertex, k-r, k) to every pixel (a hypercube
+    automorphism). One rotation step (r=1) yields 4 quadrants, each a
+    2x-decimated copy; r steps yield a 4^r-leaf tree whose top-left tile
+    (side >> r) samples one pixel per 2^r x 2^r block."""
     side = big.width
     m = side.bit_length() - 1          # bits per coordinate
     k = 2 * m                          # hypercube dimension
@@ -190,7 +202,7 @@ def hypercube_transform(big):
         arr = np.asarray(big)
         gx = gray_encode(np.arange(side, dtype=np.int64))
         G = (gx[None, :] << m) | gx[:, None]          # G[y, x]
-        G2 = ((G << (k - 1)) | (G >> 1)) & mask       # leftRotate by k-1
+        G2 = ((G << (k - r)) | (G >> r)) & mask       # leftRotate by k-r
         X1 = gray_decode_np(G2 >> m)
         Y1 = gray_decode_np(G2 & ((1 << m) - 1))
         out = np.empty_like(arr)
@@ -202,7 +214,7 @@ def hypercube_transform(big):
         gy = gray_encode(y)
         for x in range(side):
             g = (gray_encode(x) << m) | gy
-            g2 = ((g << (k - 1)) | (g >> 1)) & mask
+            g2 = ((g << (k - r)) | (g >> r)) & mask
             px_out[gray_decode_int(g2 >> m), gray_decode_int(g2 & ((1 << m) - 1))] = px_in[x, y]
     return out
 
@@ -218,35 +230,42 @@ if debug_dir:
 
 total_chars = len(text)
 img_tokens = 0
+T = N >> tree                                         # sent tile side
 for i, page_lines in enumerate(pages):
     r1x = render(page_lines, N)
     big = r1x.resize((2 * N, 2 * N), Image.NEAREST)   # constant 2x2 blocks
-    transformed = hypercube_transform(big)
-    quad = transformed.crop((0, 0, N, N))
-
-    if np is not None:
-        exact = np.array_equal(np.asarray(quad), np.asarray(r1x))
-    else:
-        exact = list(quad.getdata()) == list(r1x.getdata())
-    if not exact:
-        print("warning: quadrant != 1x render (invariant violated!)", file=sys.stderr)
+    transformed = hypercube_transform(big, r=tree + 1)
+    tile = transformed.crop((0, 0, T, T))
 
     name = out_name(i)
-    quad.save(name, optimize=True)
-    img_tokens += math.ceil(N * N / 750)
+    tile.save(name, optimize=True)
+    img_tokens += math.ceil(T * T / 750)
     if debug_dir:
         base = os.path.splitext(os.path.basename(name))[0]
         r1x.save(os.path.join(debug_dir, f"{base}-render1x.png"))
         big.save(os.path.join(debug_dir, f"{base}-canvas2x.png"))
         transformed.save(os.path.join(debug_dir, f"{base}-transformed.png"))
-    print(f"{name}  {N}x{N}px  {os.path.getsize(name)} bytes  "
-          f"(lossless quadrant: {'ok' if exact else 'FAILED'})")
+
+    if tree == 0:
+        if np is not None:
+            exact = np.array_equal(np.asarray(tile), np.asarray(r1x))
+        else:
+            exact = list(tile.getdata()) == list(r1x.getdata())
+        if not exact:
+            print("warning: quadrant != 1x render (invariant violated!)",
+                  file=sys.stderr)
+        print(f"{name}  {T}x{T}px  {os.path.getsize(name)} bytes  "
+              f"(lossless quadrant: {'ok' if exact else 'FAILED'})")
+    else:
+        print(f"{name}  {T}x{T}px  {os.path.getsize(name)} bytes  "
+              f"(tree depth {tree}: lossy {2 ** tree}x decimation of the "
+              f"{N}px render)")
 
 text_tokens = max(1, total_chars // 4)
 print(f"---")
 print(f"text: {total_chars} chars (~{text_tokens} tokens as text)")
 print(f"image: {len(pages)} page(s), ~{img_tokens} image tokens "
-      f"({N}*{N}/750 per page)")
+      f"({T}*{T}/750 per page)")
 if img_tokens < text_tokens:
     print(f"estimated savings: {text_tokens / img_tokens:.1f}x")
 else:

@@ -37,3 +37,8 @@ Page side defaults to 512px (`-m 512`) — best chars-per-token density,
 ~3.6-3.8x steady savings across text sizes. 1024px pages pack ~20% fewer
 chars per token and hit bad canvas-waste steps at intermediate sizes.
 Never pass `-m` above 1568 or the API downscales and destroys the text.
+
+`-t D` (experimental) goes below the lossless floor: each extra tree level
+sends a deeper quadtree tile — half the side, 4x fewer tokens, LOSSY
+jittered decimation of the render. Readability under evaluation; do not
+use in the funnel yet.
