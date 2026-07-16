@@ -60,6 +60,9 @@ it (same fixture, transcription similarity against ground truth):
 
 ![tree depth comparison](docs/tree-depth-comparison.png)
 
+Full experiment write-up (method, all variants, findings):
+[`docs/tree-depth-experiment.md`](docs/tree-depth-experiment.md).
+
 Verdict: **raw decimation loses to just rendering a smaller font.** At
 the same 88-token cost, `-t 1` over a 6px render scored 0.35 (word
 shapes survive, glyphs don't) while a native 3px render scored 0.66; a
