@@ -72,7 +72,9 @@ cat prompt.txt | ./hyperprompt.sh -o out.png   # from a file/pipe
 ./hyperprompt.sh -s 8  "..."     # font size (default 6; 5 is the floor, 8 conservative)
 ./hyperprompt.sh -m 1024 "..."   # max image side (default 512; keep <= 1568)
 ./hyperprompt.sh -t 1 "..."      # extra tree depth: halves the sent tile per
-                                 # level = 4x fewer tokens — LOSSY, experimental
+                                 # level = 4x fewer tokens — LOSSY; in tests a
+                                 # native smaller font (-s 4) read better at
+                                 # the same token cost
 ./hyperprompt.sh -f font.ttf ... # custom monospace font
 ./hyperprompt.sh --no-aa "..."   # disable antialiasing
 ./hyperprompt.sh --debug DIR ... # save intermediate stages (1x render,

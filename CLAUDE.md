@@ -40,5 +40,10 @@ Never pass `-m` above 1568 or the API downscales and destroys the text.
 
 `-t D` (experimental) goes below the lossless floor: each extra tree level
 sends a deeper quadtree tile — half the side, 4x fewer tokens, LOSSY
-jittered decimation of the render. Readability under evaluation; do not
-use in the funnel yet.
+jittered decimation of the render. Verdict from in-session readability
+tests (2026-07): decimation destroys glyphs — at equal token cost a
+NATIVE smaller font always reads better (`-t 1` on 6px scored 0.35
+transcription similarity vs 0.66 for native 3px, same 88-token page).
+For extra savings use `-s 4` (~7x, ~0.93 fidelity on unseen text);
+keep the 6px default when verbatim accuracy matters. Do not use `-t`
+in the funnel.
