@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
-# hyperchat.sh — chat com o Claude onde mensagens longas sao renderizadas em
-# imagem pelo hyperprompt.sh antes do envio (economia de tokens de entrada).
-# E um chat normal com historico; a UNICA diferenca: turnos com >= HYPER_MIN
-# caracteres viram PNG e vao como blocos de imagem. Turnos curtos vao como
-# texto, porque abaixo do limiar a imagem custaria MAIS tokens.
+# hyperchat.sh — chat with Claude where long messages are rendered to an
+# image by hyperprompt.sh before sending (input-token savings).
+# It is a normal chat with history; the ONLY difference: turns with >=
+# HYPER_MIN characters become PNGs and go as image blocks. Short turns go
+# as text, because below the threshold an image would cost MORE tokens.
 #
-# Requer: curl, python3 e ANTHROPIC_API_KEY exportada.
+# Requires: curl, python3 and ANTHROPIC_API_KEY exported.
 #
-# Uso:
+# Usage:
 #   ./hyperchat.sh
-#     > ola, tudo bem?                 texto curto -> enviado como texto
-#     > @docs/especificacao.txt        conteudo do arquivo vira o turno
-#     > :q                             sair
+#     > hello, how are you?            short text -> sent as text
+#     > @docs/specification.txt        file content becomes the turn
+#     > :q                             quit
 #
-# Variaveis de ambiente:
-#   MODEL      modelo (default: claude-opus-4-8)
-#   HYPER_MIN  minimo de chars para converter em imagem (default: 600)
-#   SYSTEM     system prompt do agente
-#   DRY_RUN=1  nao chama a API; mostra o que seria enviado (para testes)
+# Environment variables:
+#   MODEL      model (default: claude-opus-4-8)
+#   HYPER_MIN  minimum chars to convert into an image (default: 600)
+#   SYSTEM     the agent's system prompt
+#   DRY_RUN=1  don't call the API; show what would be sent (for testing)
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -26,7 +26,7 @@ HYPER_MIN="${HYPER_MIN:-600}"
 export SYSTEM="${SYSTEM:-You are a helpful assistant. Some user messages arrive rendered as PNG images to save tokens; read the text in the image and respond to it normally, as if it had been typed.}"
 DRY_RUN="${DRY_RUN:-0}"
 if [[ "$DRY_RUN" != 1 ]]; then
-  : "${ANTHROPIC_API_KEY:?exporte ANTHROPIC_API_KEY (ou rode com DRY_RUN=1)}"
+  : "${ANTHROPIC_API_KEY:?export ANTHROPIC_API_KEY (or run with DRY_RUN=1)}"
 fi
 
 TMP="$(mktemp -d)"
@@ -35,7 +35,7 @@ export HIST="$TMP/history.json"
 export TMPPAYLOAD="$TMP/payload.json"
 echo "[]" > "$HIST"
 
-echo "hyperchat: modelo=$MODEL  limiar-imagem=${HYPER_MIN} chars  (:q para sair)"
+echo "hyperchat: model=$MODEL  image-threshold=${HYPER_MIN} chars  (:q to quit)"
 
 while IFS= read -r -e -p $'\n> ' line || break; do
   [[ "$line" == ":q" ]] && break
@@ -43,24 +43,24 @@ while IFS= read -r -e -p $'\n> ' line || break; do
 
   if [[ "$line" == @* && -f "${line#@}" ]]; then
     text="$(cat "${line#@}")"
-    echo "  [arquivo ${line#@}: ${#text} chars]"
+    echo "  [file ${line#@}: ${#text} chars]"
   else
     text="$line"
   fi
 
-  # -------------------------------------------- turno longo -> imagem(ns)
+  # -------------------------------------------- long turn -> image(s)
   imgs=()
   if (( ${#text} >= HYPER_MIN )); then
     rm -f "$TMP"/turn*.png
     if printf '%s' "$text" | ./hyperprompt.sh -o "$TMP/turn.png" > "$TMP/hyper.log" 2>&1; then
       for f in "$TMP"/turn*.png; do imgs+=("$f"); done
-      sed 's/^/  [hyperprompt] /' "$TMP/hyper.log" | grep -E "tokens|economia|px" || true
+      sed 's/^/  [hyperprompt] /' "$TMP/hyper.log" | grep -E "tokens|savings|px" || true
     else
-      echo "  [hyperprompt falhou; enviando como texto]" >&2
+      echo "  [hyperprompt failed; sending as text]" >&2
     fi
   fi
 
-  # ------------------------------------ anexa turno do usuario ao historico
+  # ------------------------------------ append user turn to the history
   HYPER_TEXT="$text" python3 - ${imgs[@]+"${imgs[@]}"} <<'PY'
 import base64, json, os, sys
 hist = json.load(open(os.environ["HIST"]))
@@ -79,7 +79,7 @@ hist.append({"role": "user", "content": content})
 json.dump(hist, open(os.environ["HIST"], "w"))
 PY
 
-  # -------------------------------------------------- monta payload e envia
+  # -------------------------------------------------- build payload and send
   python3 - <<'PY' > "$TMP/payload.json"
 import json, os
 hist = json.load(open(os.environ["HIST"]))
@@ -87,7 +87,7 @@ print(json.dumps({
     "model": os.environ["MODEL"],
     "max_tokens": 8192,
     "system": os.environ["SYSTEM"],
-    "cache_control": {"type": "ephemeral"},   # cacheia o historico entre turnos
+    "cache_control": {"type": "ephemeral"},   # caches the history between turns
     "messages": hist,
 }))
 PY
@@ -98,11 +98,11 @@ import json, os
 p = json.load(open(os.environ["TMPPAYLOAD"]))
 last = p["messages"][-1]["content"]
 if isinstance(last, str):
-    print(f"  [dry-run] turno vai como TEXTO ({len(last)} chars)")
+    print(f"  [dry-run] turn goes as TEXT ({len(last)} chars)")
 else:
     n = sum(1 for b in last if b["type"] == "image")
-    print(f"  [dry-run] turno vai como {n} IMAGEM(ns) + instrucao curta")
-print(f"  [dry-run] historico: {len(p['messages'])} mensagem(ns); payload nao enviado")
+    print(f"  [dry-run] turn goes as {n} IMAGE(s) + short instruction")
+print(f"  [dry-run] history: {len(p['messages'])} message(s); payload not sent")
 PY
     continue
   fi
@@ -113,24 +113,24 @@ PY
     -H "anthropic-version: 2023-06-01" \
     --data-binary @"$TMP/payload.json" > "$TMP/resp.json"
 
-  # ------------------------------------- imprime resposta e atualiza historico
+  # ------------------------------------- print response and update history
   python3 - "$TMP/resp.json" <<'PY'
 import json, os, sys
 r = json.load(open(sys.argv[1]))
 if r.get("type") == "error":
-    print(f"  [erro da API: {r['error']['type']}: {r['error']['message']}]")
+    print(f"  [API error: {r['error']['type']}: {r['error']['message']}]")
     hist = json.load(open(os.environ["HIST"]))
-    hist.pop()  # remove o turno que falhou para nao corromper o historico
+    hist.pop()  # drop the failed turn so the history is not corrupted
     json.dump(hist, open(os.environ["HIST"], "w"))
     sys.exit(0)
 text = "\n".join(b["text"] for b in r["content"] if b["type"] == "text")
 print()
 print(text)
 u = r["usage"]
-print(f"\n  [tokens: entrada={u['input_tokens']}"
-      f" cache_leitura={u.get('cache_read_input_tokens', 0)}"
-      f" cache_escrita={u.get('cache_creation_input_tokens', 0)}"
-      f" saida={u['output_tokens']}]")
+print(f"\n  [tokens: input={u['input_tokens']}"
+      f" cache_read={u.get('cache_read_input_tokens', 0)}"
+      f" cache_write={u.get('cache_creation_input_tokens', 0)}"
+      f" output={u['output_tokens']}]")
 hist = json.load(open(os.environ["HIST"]))
 hist.append({"role": "assistant", "content": text})
 json.dump(hist, open(os.environ["HIST"], "w"))

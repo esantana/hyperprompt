@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# hyperfunnel.sh — liga/desliga o funil de imagem (hyperprompt) globalmente
-# no Claude Code, para todos os projetos.
+# hyperfunnel.sh — turns the image funnel (hyperprompt) on/off globally in
+# Claude Code, for every project.
 #
-# Uso:
-#   ./hyperfunnel.sh on       instala o comando /hyperread global e a regra
-#                             automatica no ~/.claude/CLAUDE.md
-#   ./hyperfunnel.sh off      remove ambos (so o bloco marcado; qualquer outro
-#                             conteudo seu no CLAUDE.md global e preservado)
-#   ./hyperfunnel.sh status   mostra o estado atual
+# Usage:
+#   ./hyperfunnel.sh on       installs the global /hyperread command and the
+#                             automatic rule in ~/.claude/CLAUDE.md
+#   ./hyperfunnel.sh off      removes both (only the marked block; any other
+#                             content of yours in the global CLAUDE.md is
+#                             preserved)
+#   ./hyperfunnel.sh status   shows the current state
 #
-# As mudancas valem a partir da PROXIMA inicializacao do Claude Code.
+# Changes take effect at the NEXT Claude Code startup.
 set -euo pipefail
 
 PROJECT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -31,22 +32,22 @@ start  = os.environ["START_MARK"]
 end    = os.environ["END_MARK"]
 
 block = f"""{start}
-## Funil de imagem para economia de tokens (hyperprompt)
-Ao ingerir um arquivo de TEXTO de referencia com mais de ~2.000 caracteres
-(documentos, specs, prosa - nao codigo a editar):
-1. Rode: {script} -o <scratchpad>/hyperread.png < arquivo
-2. Leia o(s) PNG(s) gerados com a ferramenta Read em vez do texto original
-   (~4x menos tokens; se o texto for longo ha paginas -1.png, -2.png, ...).
-3. Confirme "quadrante lossless: ok" na saida do script.
-Excecoes - leia o texto original normalmente: arquivo que sera editado na
-sessao (Edit exige Read do arquivo real); quando numeros de linha exatos
-importam; arquivos com menos de ~2.000 chars (imagem tem piso de ~88
-tokens/pagina). O comando /hyperread <arquivo> encapsula esse fluxo.
+## Image funnel for token savings (hyperprompt)
+When ingesting a reference TEXT file larger than ~2,000 characters
+(documents, specs, prose - not code you will edit):
+1. Run: {script} -o <scratchpad>/hyperread.png < file
+2. Read the generated PNG(s) with the Read tool instead of the original
+   text (~4x fewer tokens; long texts paginate into -1.png, -2.png, ...).
+3. Confirm "lossless quadrant: ok" in the script output.
+Exceptions - read the original text normally: files that will be edited in
+the session (Edit requires Read of the real file); when exact line numbers
+matter; files under ~2,000 chars (images have a ~88 token/page floor).
+The /hyperread <file> command wraps this flow.
 {end}"""
 
 content = open(path).read() if os.path.exists(path) else ""
 
-# remove bloco existente (idempotente), preservando o resto do arquivo
+# remove any existing block (idempotent), preserving the rest of the file
 while start in content and end in content:
     i, j = content.index(start), content.index(end) + len(end)
     content = (content[:i] + content[j:]).strip("\n") + "\n" if (content[:i] + content[j:]).strip() else ""
@@ -58,7 +59,7 @@ if content.strip():
     os.makedirs(os.path.dirname(path), exist_ok=True)
     open(path, "w").write(content)
 elif os.path.exists(path):
-    os.remove(path)  # arquivo era so o nosso bloco; remove para nao deixar lixo
+    os.remove(path)  # the file was only our block; remove it to leave no litter
 PY
 }
 
@@ -66,57 +67,57 @@ write_command_file() {
   mkdir -p "$(dirname "$CMD_DST")"
   cat > "$CMD_DST" <<EOF
 ---
-description: Le um arquivo de texto longo como imagem PNG (hyperprompt) para pagar ~4x menos tokens
+description: Reads a long text file as a PNG image (via hyperprompt.sh) to pay ~4x fewer tokens
 ---
-Leia o arquivo \`\$ARGUMENTS\` pelo funil de imagem, para economizar tokens:
+Read the file \`\$ARGUMENTS\` through the image funnel, to save tokens:
 
-1. Rode \`$SCRIPT -o <scratchpad>/hyperread.png < \$ARGUMENTS\` (use o diretorio de scratchpad da sessao para o PNG).
-2. Se o texto for longo, o script pagina em \`hyperread-1.png\`, \`hyperread-2.png\`, ... — leia todas as paginas.
-3. Leia o(s) PNG(s) com a ferramenta Read e use o conteudo como se tivesse lido o arquivo de texto original.
-4. NAO leia o arquivo de texto original — o objetivo e pagar tokens de imagem (lado^2/750, ~4x menos que o texto).
-5. Confirme na saida do script a linha "quadrante lossless: ok" e reporte a economia estimada ao usuario.
+1. Run \`$SCRIPT -o <scratchpad>/hyperread.png < \$ARGUMENTS\` (use the session's scratchpad directory for the PNG).
+2. If the text is long, the script paginates into \`hyperread-1.png\`, \`hyperread-2.png\`, ... — read every page.
+3. Read the PNG page(s) with the Read tool and use the content as if you had read the original text file.
+4. Do NOT read the original text file — the goal is to pay image tokens (side^2/750, ~4x less than the text).
+5. Confirm the line "lossless quadrant: ok" in the script output and report the estimated savings to the user.
 
-Restricoes (nesses casos leia o arquivo original normalmente e avise o usuario):
-- Arquivos que serao editados nesta sessao — a ferramenta Edit exige Read do arquivo real.
-- Quando numeros de linha exatos importam (referencias codigo:linha, diffs).
-- Arquivos com menos de ~2.000 caracteres — abaixo disso a imagem custa igual ou mais.
+Restrictions (in these cases read the original file normally and tell the user):
+- Files that will be edited in this session — the Edit tool requires a Read of the real file.
+- When exact line numbers matter (code:line references, diffs).
+- Files under ~2,000 characters — below that the image costs the same or more.
 EOF
 }
 
 status() {
-  local cmd_ok=nao rule_ok=nao
-  [[ -f "$CMD_DST" ]] && cmd_ok=sim
-  [[ -f "$GLOBAL_MD" ]] && grep -qF "$START_MARK" "$GLOBAL_MD" && rule_ok=sim
-  echo "comando /hyperread global : $cmd_ok  ($CMD_DST)"
-  echo "regra automatica global   : $rule_ok  ($GLOBAL_MD)"
-  if [[ "$cmd_ok" == sim && "$rule_ok" == sim ]]; then
-    echo "estado: ATIVO (vale a partir da proxima inicializacao do Claude Code)"
-  elif [[ "$cmd_ok" == nao && "$rule_ok" == nao ]]; then
-    echo "estado: DESATIVADO"
+  local cmd_ok=no rule_ok=no
+  [[ -f "$CMD_DST" ]] && cmd_ok=yes
+  [[ -f "$GLOBAL_MD" ]] && grep -qF "$START_MARK" "$GLOBAL_MD" && rule_ok=yes
+  echo "global /hyperread command : $cmd_ok  ($CMD_DST)"
+  echo "global automatic rule     : $rule_ok  ($GLOBAL_MD)"
+  if [[ "$cmd_ok" == yes && "$rule_ok" == yes ]]; then
+    echo "state: ACTIVE (takes effect at the next Claude Code startup)"
+  elif [[ "$cmd_ok" == no && "$rule_ok" == no ]]; then
+    echo "state: OFF"
   else
-    echo "estado: PARCIAL — rode './hyperfunnel.sh on' ou 'off' para corrigir"
+    echo "state: PARTIAL — run './hyperfunnel.sh on' or 'off' to fix"
   fi
 }
 
 case "${1:-}" in
   on)
-    [[ -x "$SCRIPT" ]] || { echo "erro: $SCRIPT nao existe ou nao e executavel" >&2; exit 1; }
+    [[ -x "$SCRIPT" ]] || { echo "error: $SCRIPT does not exist or is not executable" >&2; exit 1; }
     write_command_file
     edit_global_md add
-    echo "funil ATIVADO globalmente."
+    echo "funnel ENABLED globally."
     status
     ;;
   off)
     rm -f "$CMD_DST"
     edit_global_md remove
-    echo "funil DESATIVADO globalmente."
+    echo "funnel DISABLED globally."
     status
     ;;
   status)
     status
     ;;
   *)
-    echo "uso: $0 on|off|status" >&2
+    echo "usage: $0 on|off|status" >&2
     exit 1
     ;;
 esac

@@ -70,7 +70,7 @@ cat prompt.txt | ./hyperprompt.sh -o out.png   # from a file/pipe
 
 # options
 ./hyperprompt.sh -s 8  "..."     # font size (default 6; 5 is the floor, 8 conservative)
-./hyperprompt.sh -m 512 "..."    # max image side (default 1024; keep <= 1568)
+./hyperprompt.sh -m 1024 "..."   # max image side (default 512; keep <= 1568)
 ./hyperprompt.sh -f font.ttf ... # custom monospace font
 ./hyperprompt.sh --no-aa "..."   # disable antialiasing
 ./hyperprompt.sh --debug DIR ... # save intermediate stages (1x render,

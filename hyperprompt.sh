@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
-# hyperprompt.sh — converte texto de prompt em imagem PNG compacta usando o
-# algoritmo de hipercubo (Gray code + rotacao de bits) para extrair um
-# quadrante decimado. O texto e renderizado em 2x alinhado aos blocos 2x2,
-# de modo que o quadrante extraido e identico ao render 1x (sem perda).
+# hyperprompt.sh — converts prompt text into a compact PNG image using the
+# hypercube algorithm (Gray code + bit rotation) to extract a decimated
+# quadrant. The text is rendered at 2x aligned to 2x2 blocks, so the
+# extracted quadrant is identical to the 1x render (lossless).
 #
-# Uso:
-#   ./hyperprompt.sh "texto do prompt"
+# Usage:
+#   ./hyperprompt.sh "prompt text"
 #   cat prompt.txt | ./hyperprompt.sh
 #
-# Opcoes:
-#   -o ARQ        arquivo de saida (default: hyperprompt.png)
-#   -s N          tamanho da fonte em px (default: 6 = menor tamanho com
-#                 leitura confortavel; 5 e o piso absoluto, 8 e conservador)
-#   -f FONTE      caminho de fonte .ttf/.ttc (default: Menlo/Monaco)
-#   -m N          lado maximo do quadrante enviado (default: 512 = melhor
-#                 densidade de chars/token; nao passe de 1568 ou a API
-#                 redimensiona e destroi o texto)
-#   --no-aa       desliga antialiasing (fonte bitmap dura)
-#   --debug DIR   salva estagios intermediarios (render 1x, canvas 2x,
-#                 imagem transformada com os 4 quadrantes)
+# Options:
+#   -o FILE       output file (default: hyperprompt.png)
+#   -s N          font size in px (default: 6 = smallest size that reads
+#                 comfortably; 5 is the absolute floor, 8 is conservative)
+#   -f FONT       path to a .ttf/.ttc font (default: Menlo/Monaco)
+#   -m N          max side of the sent quadrant (default: 512 = best
+#                 chars-per-token density; never go above 1568 or the API
+#                 resizes the image and destroys the text)
+#   --no-aa       disable antialiasing (hard bitmap font)
+#   --debug DIR   save intermediate stages (1x render, 2x canvas,
+#                 transformed image with the 4 quadrants)
 set -euo pipefail
 
 OUT="hyperprompt.png"
@@ -50,7 +50,7 @@ if [[ ${#ARGS[@]} -gt 0 ]]; then
 else
   TEXT="$(cat)"
 fi
-[[ -n "$TEXT" ]] || { echo "erro: texto vazio" >&2; exit 1; }
+[[ -n "$TEXT" ]] || { echo "error: empty text" >&2; exit 1; }
 
 export HYPER_TEXT="$TEXT" HYPER_OUT="$OUT" HYPER_FONTSIZE="$FONTSIZE" \
        HYPER_FONT="$FONT" HYPER_MAXSIDE="$MAXSIDE" HYPER_AA="$AA" HYPER_DEBUG="$DEBUG"
@@ -76,7 +76,7 @@ try:
 except ImportError:
     np = None
 
-# ---------------------------------------------------------------- fonte
+# ----------------------------------------------------------------- font
 def load_font():
     candidates = [font_path] if font_path else []
     candidates += [
@@ -95,12 +95,12 @@ ascent, descent = font.getmetrics()
 line_h = ascent + descent
 margin = 2
 
-# ------------------------------------------------------- quebra de linha
+# -------------------------------------------------------- line wrapping
 paragraphs = text.rstrip("\n").split("\n")
-gap_h = max(2, line_h // 2)  # linha em branco vira gap de meia altura
+gap_h = max(2, line_h // 2)  # blank line becomes a half-height gap
 
 def wrap(cols):
-    """Lista de (texto, altura_px); linha vazia ocupa meia altura."""
+    """List of (text, height_px); a blank line takes half a line height."""
     items = []
     for p in paragraphs:
         if not p.strip():
@@ -115,14 +115,14 @@ def wrap(cols):
     return items
 
 def paginate(items, side):
-    """Quebra em paginas pela altura acumulada em pixels."""
+    """Break into pages by accumulated pixel height."""
     limit = side - 2 * margin
     pages, page, h = [], [], 0
     for it in items:
         if h + it[1] > limit and page:
             pages.append(page)
             page, h = [], 0
-            if it[0] == "":  # nao abrir pagina com linha em branco
+            if it[0] == "":  # don't open a page with a blank line
                 continue
         page.append(it)
         h += it[1]
@@ -132,7 +132,7 @@ def paginate(items, side):
 
 sides = [s for s in (64, 128, 256, 512, 1024, 2048) if s <= max_side]
 if not sides:
-    sys.exit(f"erro: -m {max_side} pequeno demais (minimo 64)")
+    sys.exit(f"error: -m {max_side} too small (minimum 64)")
 
 pages, N = None, None
 for side in sides:
@@ -144,12 +144,12 @@ for side in sides:
         N, pages = side, [items]
         break
 
-if pages is None:  # nao coube em uma imagem: paginar no lado maximo
+if pages is None:  # didn't fit one image: paginate at the max side
     N = sides[-1]
     cols = int((N - 2 * margin) // adv)
     pages = paginate(wrap(cols), N)
 
-# ------------------------------------------------------------ render 1x
+# ------------------------------------------------------------ 1x render
 def render(items, side):
     img = Image.new("L", (side, side), 255)
     d = ImageDraw.Draw(img)
@@ -162,7 +162,7 @@ def render(items, side):
         y += h
     return img
 
-# --------------------------------- hipercubo: Gray code + rotacao de bits
+# --------------------------------- hypercube: Gray code + bit rotation
 def gray_encode(n):
     return n ^ (n >> 1)
 
@@ -180,17 +180,17 @@ def gray_decode_int(n):
     return p
 
 def hypercube_transform(big):
-    """Aplica leftRotate(vertex, k-1, k) a cada pixel (automorfismo do
-    hipercubo). Saida: 4 quadrantes, cada um uma copia decimada 2x."""
+    """Applies leftRotate(vertex, k-1, k) to every pixel (a hypercube
+    automorphism). Output: 4 quadrants, each a 2x-decimated copy."""
     side = big.width
-    m = side.bit_length() - 1          # bits por coordenada
-    k = 2 * m                          # dimensao do hipercubo
+    m = side.bit_length() - 1          # bits per coordinate
+    k = 2 * m                          # hypercube dimension
     mask = (1 << k) - 1
     if np is not None:
         arr = np.asarray(big)
         gx = gray_encode(np.arange(side, dtype=np.int64))
         G = (gx[None, :] << m) | gx[:, None]          # G[y, x]
-        G2 = ((G << (k - 1)) | (G >> 1)) & mask       # leftRotate por k-1
+        G2 = ((G << (k - 1)) | (G >> 1)) & mask       # leftRotate by k-1
         X1 = gray_decode_np(G2 >> m)
         Y1 = gray_decode_np(G2 & ((1 << m) - 1))
         out = np.empty_like(arr)
@@ -220,7 +220,7 @@ total_chars = len(text)
 img_tokens = 0
 for i, page_lines in enumerate(pages):
     r1x = render(page_lines, N)
-    big = r1x.resize((2 * N, 2 * N), Image.NEAREST)   # blocos 2x2 constantes
+    big = r1x.resize((2 * N, 2 * N), Image.NEAREST)   # constant 2x2 blocks
     transformed = hypercube_transform(big)
     quad = transformed.crop((0, 0, N, N))
 
@@ -229,7 +229,7 @@ for i, page_lines in enumerate(pages):
     else:
         exact = list(quad.getdata()) == list(r1x.getdata())
     if not exact:
-        print("aviso: quadrante != render 1x (invariante violada!)", file=sys.stderr)
+        print("warning: quadrant != 1x render (invariant violated!)", file=sys.stderr)
 
     name = out_name(i)
     quad.save(name, optimize=True)
@@ -240,16 +240,16 @@ for i, page_lines in enumerate(pages):
         big.save(os.path.join(debug_dir, f"{base}-canvas2x.png"))
         transformed.save(os.path.join(debug_dir, f"{base}-transformed.png"))
     print(f"{name}  {N}x{N}px  {os.path.getsize(name)} bytes  "
-          f"(quadrante lossless: {'ok' if exact else 'FALHOU'})")
+          f"(lossless quadrant: {'ok' if exact else 'FAILED'})")
 
 text_tokens = max(1, total_chars // 4)
 print(f"---")
-print(f"texto: {total_chars} chars (~{text_tokens} tokens como texto)")
-print(f"imagem: {len(pages)} pagina(s), ~{img_tokens} tokens de imagem "
-      f"({N}*{N}/750 por pagina)")
+print(f"text: {total_chars} chars (~{text_tokens} tokens as text)")
+print(f"image: {len(pages)} page(s), ~{img_tokens} image tokens "
+      f"({N}*{N}/750 per page)")
 if img_tokens < text_tokens:
-    print(f"economia estimada: {text_tokens / img_tokens:.1f}x")
+    print(f"estimated savings: {text_tokens / img_tokens:.1f}x")
 else:
-    print(f"sem economia neste tamanho ({img_tokens} >= {text_tokens}); "
-          f"texto curto demais para compensar")
+    print(f"no savings at this size ({img_tokens} >= {text_tokens}); "
+          f"text too short to pay off")
 PY
