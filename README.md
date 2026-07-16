@@ -34,6 +34,13 @@ image with **100% accuracy (zero divergences)**.
    constant, the quadrant is bit-for-bit identical to the 1× render: a
    lossless 4:1 downsample. The script verifies this invariant on every run.
 
+To be precise about where the savings come from: at the default depth the
+transform is a per-run **verified identity** — the sent image is the 1×
+render, and the token economy comes entirely from drawing the text small
+and paying image-token pricing instead of text-token pricing. The
+hypercube automorphism is the structure that guarantees the block-aligned
+decimation is exact, and that generalizes it to deeper levels (below).
+
 | Final output (512×512, sent to the model) | Transformed 2× canvas (the four polyphase quadrants) |
 |---|---|
 | ![output quadrant](docs/example-output.png) | ![transformed canvas](docs/example-transformed.png) |
@@ -42,6 +49,26 @@ On natural images the four quadrants differ (they sample different points),
 which is what makes the transform useful for progressive multiresolution.
 The original research notebook is in
 [`hypercube_pureimage.ipynb`](hypercube_pureimage.ipynb).
+
+## Tree depth (`-t`): below the lossless floor
+
+Rotating the vertex label by `r = D+1` bits instead of one descends the
+quadtree: the top-left tile shrinks to `side >> D`, paying **4× fewer
+tokens per level**, as a jittered one-pixel-per-block subsample of the
+render — no longer lossless. We measured whether the model can still read
+it (same fixture, transcription similarity against ground truth):
+
+![tree depth comparison](docs/tree-depth-comparison.png)
+
+Verdict: **decimation loses to just rendering a smaller font.** At the
+same 88-token cost, `-t 1` over a 6px render scored 0.35 (word shapes
+survive, glyphs don't) while a native 3px render scored 0.66; a native
+4px render on unseen technical text scored 0.93 at 7.1× savings.
+Subsampling misses glyph strokes; a native small render places strokes
+on the pixel grid with antialiasing. `-t` stays available for
+experiments (`-t 0` is byte-identical to the previous behavior), but for
+extra savings prefer `-s 4` — and keep the 6px default when verbatim
+accuracy matters.
 
 ## Token economics
 
