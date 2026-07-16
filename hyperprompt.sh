@@ -13,8 +13,9 @@
 #   -s N          tamanho da fonte em px (default: 6 = menor tamanho com
 #                 leitura confortavel; 5 e o piso absoluto, 8 e conservador)
 #   -f FONTE      caminho de fonte .ttf/.ttc (default: Menlo/Monaco)
-#   -m N          lado maximo do quadrante enviado (default: 1024; nao passe
-#                 de 1568 ou a API redimensiona e destroi o texto)
+#   -m N          lado maximo do quadrante enviado (default: 512 = melhor
+#                 densidade de chars/token; nao passe de 1568 ou a API
+#                 redimensiona e destroi o texto)
 #   --no-aa       desliga antialiasing (fonte bitmap dura)
 #   --debug DIR   salva estagios intermediarios (render 1x, canvas 2x,
 #                 imagem transformada com os 4 quadrantes)
@@ -23,12 +24,12 @@ set -euo pipefail
 OUT="hyperprompt.png"
 FONTSIZE=6
 FONT=""
-MAXSIDE=1024
+MAXSIDE=512
 AA=1
 DEBUG=""
 ARGS=()
 
-usage() { grep '^#' "$0" | sed 's/^# \{0,1\}//' | sed -n '2,20p'; exit "${1:-0}"; }
+usage() { grep '^#' "$0" | sed 's/^# \{0,1\}//' | sed -n '2,21p'; exit "${1:-0}"; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in

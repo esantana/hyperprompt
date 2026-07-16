@@ -2,10 +2,12 @@
 
 Text-to-image prompt compression using a Gray-code hypercube automorphism
 (pixel labels are hypercube vertices; a bit rotation of the label is a
-dimension permutation; the top-left quadrant of the transformed image is a
-lossless subsample when the render is 2x block-aligned). Goal: pay image
-tokens (side^2/750) instead of text tokens — roughly 4x cheaper for long
-text.
+dimension permutation; the top-left tile of the transformed image is a
+lossless subsample when the render is block-aligned). One rotation step
+decimates 2x into 4 quadrants; k steps give a quadtree of 4^k decimated
+tiles (render must be 2^k block-aligned) — the script currently uses one
+step. Goal: pay image tokens (side^2/750) instead of text tokens — roughly
+4x cheaper for long text.
 
 ## Files
 - `hypercube_pureimage.ipynb` — original algorithm (reference).
@@ -30,3 +32,8 @@ Exceptions — read the original text normally when:
 
 Tip: feed the script paragraphs on long single lines; pre-existing hard
 line breaks waste canvas.
+
+Page side defaults to 512px (`-m 512`) — best chars-per-token density,
+~3.6-3.8x steady savings across text sizes. 1024px pages pack ~20% fewer
+chars per token and hit bad canvas-waste steps at intermediate sizes.
+Never pass `-m` above 1568 or the API downscales and destroys the text.
