@@ -92,8 +92,12 @@ decimates identically — verified by a unit test. This supersedes the
 earlier "even font sizes only" rule.
 
 **Reality check on prior-free text.** On random dictionary words (no
-language prior to lean on), 4px-effective fused tiles read at only 2–8%
-word accuracy (snapped better than unsnapped, but both low). The ~0.9
+language prior to lean on), 4px-effective fused tiles read at ~0.4 mean
+per-word character similarity with under 5% exact words — and a blinded
+A/B (3 pages per arm, 192 words each, permutation test) found **no
+reading gain from grid snapping** (p ≈ 0.99): the constraint at these
+sizes is glyph information content, not sampling phase. Snapping stays
+because it makes output deterministic and canonical. The ~0.9
 similarities above are therefore largely context-driven reconstruction,
 not glyph OCR. Treat everything below the lossless floor as gist
 reading — never trust it with identifiers, URLs or numbers. The 6px

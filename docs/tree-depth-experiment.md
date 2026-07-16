@@ -101,13 +101,21 @@ identical fused bands across lines. At 6px the natural metrics (4px
 advance, 8px line height) were already grid-perfect — one reason the
 lossless default reads at 100%.
 
-**Reality check.** On random dictionary words in numbered lines (no
-language prior to lean on), 4px-effective fused tiles read at 2–8% word
-accuracy (snapped 8%, unsnapped 2% — right direction, tiny n). The ~0.9
-similarities on man-page prose are therefore largely context-driven
-reconstruction, not glyph OCR. Practical rule: everything below the
-lossless floor is gist reading — never trust it with identifiers, URLs
-or numbers.
+**Reality check (blinded A/B, 2026-07-16).** Random dictionary words in
+numbered lines (no language prior to lean on), 3 pages per arm shuffled
+into blind probe names, 192 words per arm, per-word character similarity
+scored against ground truth: snapped 0.380 mean (1.6% exact words),
+unsnapped 0.436 (4.7% exact) — difference −0.056, one-sided permutation
+p = 0.99. **Grid snapping produces no measurable reading gain**; an
+earlier small-n signal (8% vs 2%) was noise. The consistency mechanism
+is real, but the binding constraint at ≤4px effective is glyph
+information content, not sampling phase. Both arms sitting at ~0.4
+similarity confirms the operational rule: the ~0.9 similarities on
+man-page prose are largely context-driven reconstruction, not glyph OCR
+— everything below the lossless floor is gist reading; never trust it
+with identifiers, URLs or numbers. Snapping is kept because it makes
+the output deterministic and canonical (same char, same pattern), at a
+modest capacity cost (~17% at 8px, whose 5px advance rounds to 6).
 
 ## Reproducing
 
