@@ -60,15 +60,22 @@ it (same fixture, transcription similarity against ground truth):
 
 ![tree depth comparison](docs/tree-depth-comparison.png)
 
-Verdict: **decimation loses to just rendering a smaller font.** At the
-same 88-token cost, `-t 1` over a 6px render scored 0.35 (word shapes
-survive, glyphs don't) while a native 3px render scored 0.66; a native
-4px render on unseen technical text scored 0.93 at 7.1× savings.
+Verdict: **raw decimation loses to just rendering a smaller font.** At
+the same 88-token cost, `-t 1` over a 6px render scored 0.35 (word
+shapes survive, glyphs don't) while a native 3px render scored 0.66; a
+native 4px render on unseen technical text scored 0.93 at 7.1× savings.
 Subsampling misses glyph strokes; a native small render places strokes
-on the pixel grid with antialiasing. `-t` stays available for
-experiments (`-t 0` is byte-identical to the previous behavior), but for
-extra savings prefer `-s 4` — and keep the 6px default when verbatim
-accuracy matters.
+on the pixel grid with antialiasing.
+
+**`--fuse` rescues the deep tiles.** The four siblings of each level
+carry the same samples with Gray-code reflections (TR mirrored in x, BL
+in y, BR rotated 180°). Orienting them and averaging is exactly a 2×2
+box filter of the render — antialiased downsampling instead of jittered
+point-sampling, at the same one-tile cost. On unseen text `-t 1 --fuse`
+scored 0.63 vs 0.35 for the raw tile: parity with a native small font.
+The invariant `fused siblings == box filter` is verified on every run.
+Both routes stay below verbatim grade — the lossless floor remains the
+default; for extra savings prefer `-s 4` or `-t 1 --fuse`.
 
 ## Token economics
 

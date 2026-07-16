@@ -39,11 +39,12 @@ chars per token and hit bad canvas-waste steps at intermediate sizes.
 Never pass `-m` above 1568 or the API downscales and destroys the text.
 
 `-t D` (experimental) goes below the lossless floor: each extra tree level
-sends a deeper quadtree tile — half the side, 4x fewer tokens, LOSSY
-jittered decimation of the render. Verdict from in-session readability
-tests (2026-07): decimation destroys glyphs — at equal token cost a
-NATIVE smaller font always reads better (`-t 1` on 6px scored 0.35
-transcription similarity vs 0.66 for native 3px, same 88-token page).
-For extra savings use `-s 4` (~7x, ~0.93 fidelity on unseen text);
-keep the 6px default when verbatim accuracy matters. Do not use `-t`
-in the funnel.
+sends a deeper quadtree tile — half the side, 4x fewer tokens, LOSSY.
+In-session readability tests (2026-07): the raw jittered tile destroys
+glyphs (0.35 similarity at `-t 1`/6px vs 0.66 for a native 3px font at
+the same 88-token cost). `--fuse` fixes it: orienting the 4 Gray-code-
+reflected siblings (mirror x / mirror y / rot180) and averaging — exactly
+a 2x2 box filter, invariant checked per run — scored 0.63, parity with
+native small fonts. For extra savings prefer `-s 4` (~7x, ~0.93) or
+`-t 1 --fuse`; keep the 6px default when verbatim accuracy matters.
+Do not use `-t` in the funnel.

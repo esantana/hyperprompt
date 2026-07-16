@@ -105,6 +105,24 @@ check "tree: real dimensions 256x256" \
 ./hyperprompt.sh -t 0 -o "$TMP/ident_t0.png" < test_prompt.txt >/dev/null 2>&1
 check "tree: -t 0 byte-identical to default"  cmp -s "$TMP/ident_default.png" "$TMP/ident_t0.png"
 
+# ---------------------------------------------------------------- test 6
+# fused siblings: oriented tiles averaged == box filter of the render
+OUT6="$(./hyperprompt.sh -t 1 --fuse --debug "$TMP/dbg" -o "$TMP/fused.png" < test_prompt.txt 2>&1)"
+RC6=$?
+check "fuse: exit code 0"                    test "$RC6" -eq 0
+check "fuse: box invariant reported ok"      grep -q "fused siblings == 2x box filter: ok" <<<"$OUT6"
+check "fuse: real dimensions 256x256" \
+  python3 -c "from PIL import Image; img = Image.open('$TMP/fused.png'); assert img.size == (256, 256), img.size"
+check "fuse: tile equals box filter of the 1x render" \
+  python3 - <<PY
+import numpy as np
+from PIL import Image
+f = np.asarray(Image.open("$TMP/fused.png"), dtype=float)
+r = np.asarray(Image.open("$TMP/dbg/fused-render1x.png"), dtype=float)
+box = r.reshape(256, 2, 256, 2).mean(axis=(1, 3))
+assert np.abs(f - box).max() <= 0.5, np.abs(f - box).max()
+PY
+
 echo "---"
 if [[ "$FAILS" -eq 0 ]]; then
   echo "all tests passed"

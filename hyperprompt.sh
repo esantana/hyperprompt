@@ -18,6 +18,9 @@
 #                 resizes the image and destroys the text)
 #   -t D          extra tree depth (default: 0 = lossless quadrant; each
 #                 level halves the sent tile = 4x fewer tokens, LOSSY)
+#   --fuse        with -t: orient the 4 sibling tiles of each level (undo
+#                 the Gray-code mirroring/rotation) and average them —
+#                 equals a box filter; reads far better than one tile
 #   --no-aa       disable antialiasing (hard bitmap font)
 #   --debug DIR   save intermediate stages (1x render, 2x canvas,
 #                 transformed image with the 4 quadrants)
@@ -28,11 +31,12 @@ FONTSIZE=6
 FONT=""
 MAXSIDE=512
 TREE=0
+FUSE=0
 AA=1
 DEBUG=""
 ARGS=()
 
-usage() { grep '^#' "$0" | sed 's/^# \{0,1\}//' | sed -n '2,23p'; exit "${1:-0}"; }
+usage() { grep '^#' "$0" | sed 's/^# \{0,1\}//' | sed -n '2,26p'; exit "${1:-0}"; }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -41,6 +45,7 @@ while [[ $# -gt 0 ]]; do
     -f) FONT="$2"; shift 2 ;;
     -m) MAXSIDE="$2"; shift 2 ;;
     -t) TREE="$2"; shift 2 ;;
+    --fuse) FUSE=1; shift ;;
     --no-aa) AA=0; shift ;;
     --debug) DEBUG="$2"; shift 2 ;;
     -h|--help) usage 0 ;;
@@ -58,7 +63,7 @@ fi
 
 export HYPER_TEXT="$TEXT" HYPER_OUT="$OUT" HYPER_FONTSIZE="$FONTSIZE" \
        HYPER_FONT="$FONT" HYPER_MAXSIDE="$MAXSIDE" HYPER_AA="$AA" \
-       HYPER_DEBUG="$DEBUG" HYPER_TREE="$TREE"
+       HYPER_DEBUG="$DEBUG" HYPER_TREE="$TREE" HYPER_FUSE="$FUSE"
 
 python3 <<'PY'
 import math
@@ -74,6 +79,7 @@ font_size = int(os.environ["HYPER_FONTSIZE"])
 font_path = os.environ["HYPER_FONT"]
 max_side  = int(os.environ["HYPER_MAXSIDE"])
 tree      = int(os.environ["HYPER_TREE"])
+fuse      = os.environ["HYPER_FUSE"] == "1"
 aa        = os.environ["HYPER_AA"] == "1"
 debug_dir = os.environ["HYPER_DEBUG"]
 
@@ -218,6 +224,28 @@ def hypercube_transform(big, r=1):
             px_out[gray_decode_int(g2 >> m), gray_decode_int(g2 & ((1 << m) - 1))] = px_in[x, y]
     return out
 
+def fuse_level(arr):
+    """One tree level with oriented siblings: hypercube-transform, undo the
+    Gray-code reflections (TR mirrored in x, BL in y, BR rotated 180) and
+    average the 4 tiles. Identity: equals a 2x2 box filter of the input."""
+    side = arr.shape[0]
+    m = side.bit_length() - 1
+    k = 2 * m
+    mask = (1 << k) - 1
+    gx = gray_encode(np.arange(side, dtype=np.int64))
+    G = (gx[None, :] << m) | gx[:, None]
+    G2 = ((G << (k - 1)) | (G >> 1)) & mask
+    X1 = gray_decode_np(G2 >> m)
+    Y1 = gray_decode_np(G2 & ((1 << m) - 1))
+    out = np.empty_like(arr)
+    out[Y1, X1] = arr
+    h = side // 2
+    return (out[:h, :h] + out[:h, h:][:, ::-1]
+            + out[h:, :h][::-1, :] + out[h:, h:][::-1, ::-1]) / 4.0
+
+if fuse and tree > 0 and np is None:
+    sys.exit("error: --fuse requires numpy")
+
 # ------------------------------------------------------------- pipeline
 def out_name(i):
     if len(pages) == 1:
@@ -233,9 +261,16 @@ img_tokens = 0
 T = N >> tree                                         # sent tile side
 for i, page_lines in enumerate(pages):
     r1x = render(page_lines, N)
-    big = r1x.resize((2 * N, 2 * N), Image.NEAREST)   # constant 2x2 blocks
-    transformed = hypercube_transform(big, r=tree + 1)
-    tile = transformed.crop((0, 0, T, T))
+    big = transformed = None
+    if fuse and tree > 0:
+        acc = np.asarray(r1x, dtype=np.float64)
+        for _ in range(tree):
+            acc = fuse_level(acc)
+        tile = Image.fromarray(np.round(acc).astype(np.uint8))
+    else:
+        big = r1x.resize((2 * N, 2 * N), Image.NEAREST)   # constant 2x2 blocks
+        transformed = hypercube_transform(big, r=tree + 1)
+        tile = transformed.crop((0, 0, T, T))
 
     name = out_name(i)
     tile.save(name, optimize=True)
@@ -243,8 +278,9 @@ for i, page_lines in enumerate(pages):
     if debug_dir:
         base = os.path.splitext(os.path.basename(name))[0]
         r1x.save(os.path.join(debug_dir, f"{base}-render1x.png"))
-        big.save(os.path.join(debug_dir, f"{base}-canvas2x.png"))
-        transformed.save(os.path.join(debug_dir, f"{base}-transformed.png"))
+        if big is not None:
+            big.save(os.path.join(debug_dir, f"{base}-canvas2x.png"))
+            transformed.save(os.path.join(debug_dir, f"{base}-transformed.png"))
 
     if tree == 0:
         if np is not None:
@@ -256,6 +292,18 @@ for i, page_lines in enumerate(pages):
                   file=sys.stderr)
         print(f"{name}  {T}x{T}px  {os.path.getsize(name)} bytes  "
               f"(lossless quadrant: {'ok' if exact else 'FAILED'})")
+    elif fuse:
+        box = np.asarray(r1x, dtype=np.float64)
+        for _ in range(tree):
+            h = box.shape[0] // 2
+            box = box.reshape(h, 2, h, 2).mean(axis=(1, 3))
+        ok = np.abs(np.asarray(tile, dtype=np.float64) - box).max() <= 0.5
+        if not ok:
+            print("warning: fused tile != box filter (invariant violated!)",
+                  file=sys.stderr)
+        print(f"{name}  {T}x{T}px  {os.path.getsize(name)} bytes  "
+              f"(tree depth {tree}, fused siblings == {2 ** tree}x box "
+              f"filter: {'ok' if ok else 'FAILED'})")
     else:
         print(f"{name}  {T}x{T}px  {os.path.getsize(name)} bytes  "
               f"(tree depth {tree}: lossy {2 ** tree}x decimation of the "
